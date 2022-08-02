@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 //use Intervention\Image\Facades\Image;
 use App\Models\User;
 
@@ -11,39 +12,35 @@ class StudentsController extends Controller
 {
     public function updateProfilePhoto(Request $request)
     {
-        $student = User::where('matricule', auth()->user()->matricule)->first();
+        $data = $request->validate(['imageUrl' => 'required|image']);
+        $student = auth()->user();
         $student->image_url = $request->file('imageUrl')->store('student_profiles', 'public');
         $student->update();
-        return response()->json([
-            'status' => 200,
-            'message' => 'Profile Photo updated successfully'
+        return response([
+            'message' => 'Profile Photo updated successfully',
+            'student' => $student
         ]);
     }
     
     public function checkCurrentPassword(Request $request)
     {
-        $student = User::where('matricule', auth()->user()->matricule)->first();
-        if (Hash::check($request->input('currentPassword'), $student->password)) {
-            return response()->json([
-                'status' => 200,
-            ]);
+        $data = $request->validate(['currentPassword' => 'required|string']);
+        $student = auth()->user();
+        if (Hash::check($data['currentPassword'], $student->password)) {
+            return response([]);
         } else {
-            return response()->json([
-                'status' => 400,
-                'message' => 'Incorrect Password'
-            ]);
+            return response(['message' => 'Incorrect Password'], 401);
         }
     }
     
     public function updatePassword(Request $request)
     {
-        $student = User::where('matricule', auth()->user()->matricule)->first();
-        $student->password = Hash::make($request->input('newPassword'));
+        $data = $request->validate(['newPassword' => 'required|string|min:5']);
+        $student = auth()->user();
+        $student->password = Hash::make($data['newPassword']);
         $student->update();
-        return response()->json([
-            'status' => 200,
-            'message' => 'Password Changed Successfully!'
-        ]);
+        auth()->user()->tokens()->delete();
+        return response(['message' => 'Password Changed Successfully!']);
     }
 
     public function getUser()
@@ -54,18 +51,6 @@ class StudentsController extends Controller
     public function logout()
     {
         auth()->user()->tokens()->delete();
-        return response()->json([
-            'message' => "Logout Successful!"
-        ]);
-    }
-
-    public function destroy($id)
-    {
-        $student = Student::find($id);
-        $student->delete();
-        return response()->json([
-            'status' => 200,
-            'message' => 'Student deleted successfully'
-        ]);
+        return response(['message' => "Logout Successful!"]);
     }
 }            

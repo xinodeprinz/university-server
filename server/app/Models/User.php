@@ -24,12 +24,14 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'matricule',
+        'email',
+        'level',
         'date_of_birth',
         'sub_division',
         'place_of_birth',
         'phone_number',
         'gender',
-        'country',
+        //'country',
         'region',
         'father_name',
         'mother_name',
@@ -38,6 +40,7 @@ class User extends Authenticatable
         'parent_address',
         'faculty',
         'department',
+        'has_graduated',
         'image_url',
         'birth_certificate',
         'gce_ol',
@@ -68,4 +71,25 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    public function faculty()
+    {
+        return $this->hasOne(Faculty::class);
+    }
+
+    public function department()
+    {
+        return $this->hasOne(Department::class);
+    }
+
+    public function courses()
+    {
+        return $this->hasMany(Course::class);
+    }
+
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
+
 }

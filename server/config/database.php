@@ -63,14 +63,14 @@ return [
             ]) : [],
         ],
 
-        'mysql_courses' => [
+        'reg_courses' => [
             'driver' => 'mysql',
             'url' => env('DATABASE_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE_COURSES', 'forge'),
-            'username' => env('DB_USERNAME', 'forge'),
-            'password' => env('DB_PASSWORD', ''),
+            'host' => env('DB_HOST_REG', '127.0.0.1'),
+            'port' => env('DB_PORT_REG', '3306'),
+            'database' => env('DB_DATABASE_REG', 'forge'),
+            'username' => env('DB_USERNAME_REG', 'forge'),
+            'password' => env('DB_PASSWORD_REG', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',

@@ -5,10 +5,16 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Providers\RouteServiceProvider;
 use App\Models\User;
+use App\Models\Department;
+use App\Models\Faculty;
+use App\Models\Admin;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Http\Request;
+use App\Mail\Gmail;
+use Illuminate\Support\Facades\Mail;
 
 
 class RegisterController extends Controller
@@ -85,54 +91,112 @@ class RegisterController extends Controller
 
     public function login()
     {
-        $student = User::where('matricule', request('matricule'))->first();
-        if($student && Hash::check(request('password'), $student->password)){
-            return response()->json([
-                'status' => 200,
+        $data = request()->validate([
+            'matricule' => 'required|string',
+            'password' => 'required|string'
+        ]);
+        $student = User::where('matricule', $data['matricule'])->first();
+        $student->date_of_birth = date('jS\ F Y', strtotime($student->date_of_birth));
+        $student->registered_date = date('jS\ F Y', strtotime($student->registered_date));
+        $academics = Admin::all(['current_semester', 'current_academic_year'])[0];
+        if($student && Hash::check($data['password'], $student->password)){
+            $faculty = Faculty::where('name', $student->faculty)->first();
+            $dept = $faculty->departments()->where('name', $student->department)->first();
+            return response([
                 'message' => 'Login Successful',
-                'token' => $student->createToken(time())->plainTextToken
-            ]);
-        } else if($student && !Hash::check(request('password'), $student->password)) {
-            return response()->json([
-                'status' => 400,
-                'message' => 'Invalid Password'
+                'token' => $student->createToken(time())->plainTextToken,
+                'dept_id' => $dept->id,
+                'student' => $student,
+                'academics' => $academics
             ]);
         } else {
-            return response()->json([
-                'status' => 404,
-                'message' => "Matricule doesn't exist"
-            ]);
-        } 
+            return response(['message' => "The credentials you've provided seem to be invalid."], 401);
+        }
     }
     public function register(Request $request)
     {
+        $request->validate([
+            'fatherName' => 'required|string',
+            'motherName' => 'required|string',
+            'fatherContact' => 'required|string|size:9',
+            'motherContact' => 'required|string|size:9',
+            'parentAddress' => 'required|string',
+            'imageUrl' => 'required|image',
+            'birthCertificate' => 'required|file',
+            'gce_ol' => 'required|file',
+            'gce_al' => 'required|file'
+        ]);
+
+        // Creating the students matricule
+        $matricule = $request->matricule;
+        $count = User::where('matricule', 'like', "$matricule%")->count();
+        $count += 1;
+        if ($count < 10) {
+            $matricule .= "00$count"; 
+        } else if ($count < 100) {
+            $matricule .= "0$count"; 
+        } else {
+            $matricule .= $count;
+        }
+
+        // The end of the matricule creation
+
+        $name = $request->firstName.' '. $request->lastName;
+        $faculty = $request->faculty;
         $student = new User();
-        $student->name = strtoupper($request->input('firstName').' '. $request->input('lastName'));
-        $student->matricule = $request->input('matricule');
+        $student->name = ucwords(strtolower($name));
+        $student->matricule = $matricule;
+        $student->email = $request->input('email');
+        $student->level = '200';
         $student->date_of_birth = $request->input('dateOfBirth');
-        $student->sub_division = strtoupper($request->input('subDivision'));
-        $student->place_of_birth = strtoupper($request->input('placeOfBirth'));
+        $student->sub_division = ucwords(strtolower($request->input('subDivision')));
+        $student->place_of_birth = ucwords(strtolower($request->input('placeOfBirth')));
         $student->phone_number = $request->input('phoneNumber');
-        $student->gender = strtoupper($request->input('gender'));
-        $student->country = strtoupper($request->input('country'));
-        $student->region = strtoupper($request->input('region'));
-        $student->father_name = strtoupper($request->input('fatherName'));
-        $student->mother_name = strtoupper($request->input('motherName'));
+        $student->gender = ucwords(strtolower($request->input('gender')));
+        //$student->country = ucwords($request->input('country'));
+        $student->region = ucwords(strtolower($request->input('region')));
+        $student->father_name = ucwords(strtolower($request->input('fatherName')));
+        $student->mother_name = ucwords(strtolower($request->input('motherName')));
         $student->father_contact = $request->input('fatherContact');
         $student->mother_contact = $request->input('motherContact');
-        $student->parent_address = strtoupper($request->input('parentAddress'));
-        $student->faculty = strtoupper($request->input('faculty'));
-        $student->department = strtoupper($request->input('department'));
+        $student->parent_address = ucwords(strtolower($request->input('parentAddress')));
+        $student->faculty = ucwords(strtolower($request->input('faculty')));
+        $student->department = ucwords(strtolower($request->input('department')));
+        $student->has_graduated = false;
         $student->image_url =  $request->file('imageUrl')->store('student_profiles', 'public');
         $student->birth_certificate =  $request->file('birthCertificate')->store('birth_certificates', 'public');
-        $student->gce_ol =  $request->file('GCE_OL')->store('gce_ol', 'public');
-        $student->gce_al =  $request->file('GCE_AL')->store('gce_al', 'public');
+        $student->gce_ol =  $request->file('gce_ol')->store('gce_ol', 'public');
+        $student->gce_al =  $request->file('gce_al')->store('gce_al', 'public');
         $student->password = Hash::make($request->input('password'));
         $student->registered_date = date('Y-m-d H:i:s', time() - 3600);
         $student->save();
-        return response()->json([
-            'status' => 200,
-            'message' => 'Student registered successfully'
+
+        //Emailing the user
+        // $details = [
+        //     'matricule' => $request->matricule,
+        //     'password' => $request->password,
+        //     'faculty' => $request->faculty,
+        //     'department' => $request->department,
+        //     'name' => strtoupper($request->input('firstName').' '. $request->input('lastName')),
+        //     'date_of_birth' =>$request->dateOfBirth
+        // ];
+        // $gmail = new Gmail($details);
+        // Mail::to($request->email)->send($gmail);
+        return response($matricule);
+    }
+
+    public function validateStudentInfo(Request $request)
+    {
+        return $request->validate([
+            'firstName' => 'required|string',
+            'lastName' => 'required|string',
+            'email' => 'required|email',
+            'subDivision' => 'required|string',
+            'dateOfBirth' => 'required|date',
+            'placeOfBirth' => 'required|string',
+            'phoneNumber' => 'required|size:9',
+            'gender' => 'required|string',
+            'region' => 'required|string'
         ]);
     }
 }

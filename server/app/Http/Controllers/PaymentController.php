@@ -3,76 +3,103 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-
-use App\Models\SchoolFee;
+use App\Models\Transaction;
+use Illuminate\Support\Facades\Validator;
 
 class PaymentController extends Controller
 {
-    public function schoolFee(Request $request)
+    public function mobile_money(Request $request)
     {
-        $payment = new SchoolFee();
-        $payment->phone_number = $request->input('phoneNumber');
-        $payment->matricule = auth()->user()->matricule;
-        $payment->amount = $request->input('amount');
-        $token = $payment->getToken();
-        $description = $request->input('description');
-        $reference = $payment->requestToPay($token, $payment->phone_number, $description, $payment->amount);
-        $status = $payment->paymentStatus($reference, $token);
+        $data = $request->validate([
+            'number' => 'required|string|size:9|number',
+            'type' => 'required|string',
+            'academic_year' => 'required|string'
+        ]);
+        $amount = 2;
+        try {
+            $transaction = new Transaction();
+            $token = $transaction->getToken();
+            $reference = $transaction->requestToPay($token, $request->number, $request->type, $amount);
+            $status = $transaction->paymentStatus($reference, $token);
+        } catch (\Throwable $th) {
+            return response([], 400);
+        }
 
         while ($status === 'PENDING')
         {
-            $status = $payment->paymentStatus($reference, $token);
+            try {
+                $status = $transaction->paymentStatus($reference, $token);
+            } catch (\Throwable $th) {
+                return response([], 400);
+            }
             if ($status === 'SUCCESSFUL') {
-                $payment->payment_date = date('Y-m-d H:i:s');
-                $payment->save();
-                return response()->json([
-                    'status' => 200,
-                    'message' => 'Transaction Successful'
+                auth()->user()->transactions()->create([
+                    'number' => $data['number'],
+                    'type' => strtoupper($data['type']),
+                    'amount' => $amount,
+                    'method' => 'MTN / Orange mobile money',
+                    'academic_year' => $data['academic_year']
                 ]);
-                break;
+                return response([]);
             } else if ($status === 'FAILED') {
-                return response()->json([
-                    'status' => 400,
-                    'message' => 'Transaction Failed'
-                ]);
-                break;
+                return response([], 400);
             }
         }
     }
 
-    public function dummySchoolFee(Request $request)
+    public function dummy_transaction(Request $request)
     {
-        if (SchoolFee::where('matricule', auth()->user()->matricule)->exists()) {
-            return response()->json([
-                'status' => 400,
-                'message' => 'Student has already paid fees!'
-            ]);
-            exit;
+        $data = [
+            'number' => $request->number,
+            'type' => $request->type,
+            'academic_year' => $request->academic_year,
+        ];
+        $validator = Validator::make($data, [
+            'number' => ['required', 'string', 'size:9'],
+            'type' => ['required', 'string'],
+            'academic_year' => ['required', 'string'],
+        ]);
+        if ($validator->fails()) {
+            return response(['status' => 403]);
         }
-        $payment = new SchoolFee();
-        $payment->phone_number = $request->input('phoneNumber');
-        $payment->matricule = auth()->user()->matricule;
-        $payment->amount = $request->input('amount');
-        $payment->payment_date = date('Y-m-d H:i:s');
-        $payment->save();
-        return response()->json([
+        $amount = 2;
+        $exits = auth()->user()->transactions()
+        ->where('type', 'SCHOOL FEE')
+        ->where('academic_year', $data['academic_year'])
+        ->exists();
+        if ($exits) {
+            return response(['message' => 'Has already paid fee'], 401);
+        }
+        auth()->user()->transactions()->create([
+            'number' => $data['number'],
+            'type' => strtoupper($data['type']),
+            'amount' => $amount,
+            'method' => 'MTN / Orange mobile money',
+            'academic_year' => $data['academic_year']
+        ]);
+        return response([
             'status' => 200,
-            'message' => 'Payment Successful!'
+            'message' => 'Transaction Successful!'
         ]);
     }
 
     public function hasPaidFee()
     {
-        if (SchoolFee::where('matricule', auth()->user()->matricule)->exists()) {
-            return response()->json([
-                'status' => 200,
-                'hasPaidFee' => true
-            ]);
-        } else {
-            return response()->json([
-                'status' => 400,
-                'hasPaidFee' => false
-            ]);
-        }
+        $academic_year = request()->query('academic_year');
+        $transaction = auth()->user()->transactions()
+        ->where('type', 'SCHOOL FEE')
+        ->where('academic_year', $academic_year)
+        ->first();
+        return $transaction ? true : false;
+    }
+
+    public function getTransactions()
+    {
+        return auth()->user()->transactions()->get();
+    }
+
+    public function testing(Request $request)
+    {
+        //return $request->file('image')->store(public_path('public').'/');
     }
 }

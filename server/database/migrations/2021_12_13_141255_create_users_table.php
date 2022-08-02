@@ -17,12 +17,14 @@ class CreateUsersTable extends Migration
             $table->id();
             $table->string('name');
             $table->string('matricule')->unique();
+            $table->string('email');
+            $table->string('level');
             $table->date('date_of_birth');
             $table->string('sub_division');
             $table->string('place_of_birth');
             $table->string('phone_number');
             $table->string('gender');
-            $table->string('country');
+            //$table->string('country');
             $table->string('region');
             $table->string('father_name');
             $table->string('mother_name');
@@ -31,6 +33,7 @@ class CreateUsersTable extends Migration
             $table->string('parent_address');
             $table->string('faculty');
             $table->string('department');
+            $table->boolean('has_graduated');
             $table->string('image_url')->nullable();
             $table->string('birth_certificate')->nullable();
             $table->string('gce_ol')->nullable();
